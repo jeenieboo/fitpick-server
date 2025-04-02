@@ -20,34 +20,39 @@ export default async function handler(req: Request) {
       });
     }
 
-    const openaiRes = await fetch('https://api.openai.com/v1/images/generations', {
+    const replicateRes = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        prompt: 'Isolated product photo of a clothing item with a clean white or transparent background. Centered, studio lighting, high clarity.',
-        model: 'dall-e-3',
-        n: 1,
-        size: '1024x1024',
-        response_format: 'url',
+        version: "df8b0d4c14c93f6e0e44a8572ef3f9449a63d6f10d58fa2c4db1ac75c9415b43", // Replicate background-removal model
+        input: {
+          image: imageUrl
+        }
       }),
     });
 
-    const result = await openaiRes.json();
+    const prediction = await replicateRes.json();
 
-    if (result?.data?.[0]?.url) {
-      return new Response(JSON.stringify({ url: result.data[0].url }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    } else {
-      console.error('OpenAI error:', result);
-      return new Response(JSON.stringify({ error: 'OpenAI generation failed' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+    if (prediction?.urls?.get) {
+      // The result isn't ready instantly; you need to poll the `get` URL.
+      const getRes = await fetch(prediction.urls.get);
+      const finalResult = await getRes.json();
+
+      if (finalResult?.output) {
+        return new Response(JSON.stringify({ url: finalResult.output }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
     }
+
+    console.error('Replicate error:', prediction);
+    return new Response(JSON.stringify({ error: 'Background removal failed' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (err) {
     console.error('Server crash:', err);
     return new Response(JSON.stringify({ error: 'Unexpected server error' }), {
