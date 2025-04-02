@@ -3,36 +3,56 @@ export const config = {
 };
 
 export default async function handler(req: Request) {
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const { imageUrl } = await req.json();
 
-    const response = await fetch("https://api.openai.com/v1/images/edit", {
-      method: "POST",
+    if (!imageUrl) {
+      return new Response(JSON.stringify({ error: 'No image URL provided' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const openaiRes = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
       headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        prompt: "Isolated product photo of this clothing item with the background removed. White or transparent background, studio lighting.",
-        image: imageUrl,
+        prompt: 'Isolated product photo of a clothing item with a clean white or transparent background. Centered, studio lighting, high clarity.',
+        model: 'dall-e-3',
         n: 1,
-        size: "512x512",
-        response_format: "url"
+        size: '1024x1024',
+        response_format: 'url',
       }),
     });
 
-    const result = await response.json();
+    const result = await openaiRes.json();
 
     if (result?.data?.[0]?.url) {
       return new Response(JSON.stringify({ url: result.data[0].url }), {
-        headers: { "Content-Type": "application/json" },
+        headers: { 'Content-Type': 'application/json' },
       });
     } else {
-      console.error("OpenAI response error:", result);
-      return new Response("OpenAI failed", { status: 500 });
+      console.error('OpenAI error:', result);
+      return new Response(JSON.stringify({ error: 'OpenAI generation failed' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
-
   } catch (err) {
-    console.error("API error:", err);
-    return new Response("Server error", { status: 500 });
+    console.error('Server crash:', err);
+    return new Response(JSON.stringify({ error: 'Unexpected server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
